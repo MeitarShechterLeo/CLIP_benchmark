@@ -113,24 +113,28 @@ def main_build(base):
         for row in rows:
             writer.writerow(row)
 
-def main_eval(base):
+def main_eval(base, model=None, transform=None, tokenizer=None):
     # Get list of pre-trained models to evaluate
-    pretrained_model = _as_list(base.pretrained_model)
-    if pretrained_model:
-        models = []
-        for name in pretrained_model:
-            if os.path.isfile(name):
-                # if path, read file, each line is a pre-trained model
-                models.extend(get_model_collection_from_file(name))
-            elif name in model_collection:
-                # if part of `model_collection`, retrieve from it
-                models.extend(model_collection[name])
-            else:
-                # if not, assume it is in the form of `model,pretrained`
-                model, pretrained = name.split(',')
-                models.append((model, pretrained))
+    if model is None:
+        pretrained_model = _as_list(base.pretrained_model)
+        if pretrained_model:
+            models = []
+            for name in pretrained_model:
+                if os.path.isfile(name):
+                    # if path, read file, each line is a pre-trained model
+                    models.extend(get_model_collection_from_file(name))
+                elif name in model_collection:
+                    # if part of `model_collection`, retrieve from it
+                    models.extend(model_collection[name])
+                else:
+                    # if not, assume it is in the form of `model,pretrained`
+                    model, pretrained = name.split(',')
+                    models.append((model, pretrained))
+        else:
+            models = list(product(base.model, base.pretrained))
+
     else:
-        models = list(product(base.model, base.pretrained))
+        models = [(model, None)]
 
     # Ge list of datasets to evaluate on
     datasets = []
@@ -182,6 +186,8 @@ def main_eval(base):
         # We iterative over all possible model/dataset/languages
         args = copy(base)
         args.model = model
+        args.transform = transform
+        args.tokenizer = tokenizer
         args.pretrained = pretrained
         args.dataset = dataset
         args.language = language
@@ -228,13 +234,14 @@ def run(args):
         dataset_name = args.dataset
     if task == "auto":
         task = get_dataset_default_task(dataset_name)
-    pretrained_slug = os.path.basename(args.pretrained) if os.path.isfile(args.pretrained) else args.pretrained
-    pretrained_slug_full_path = args.pretrained.replace('/', '_') if os.path.isfile(args.pretrained) else args.pretrained
+    if args.pretrained is not None:
+        pretrained_slug = os.path.basename(args.pretrained) if os.path.isfile(args.pretrained) else args.pretrained
+        pretrained_slug_full_path = args.pretrained.replace('/', '_') if os.path.isfile(args.pretrained) else args.pretrained
     dataset_slug = dataset_name.replace('/', '_')
     output = args.output.format(
-        model=args.model, 
-        pretrained=pretrained_slug,
-        pretrained_full_path=pretrained_slug_full_path,
+        model=args.model if args.pretrained is not None else 'CLIP_FT', 
+        pretrained=pretrained_slug if args.pretrained is not None else '',
+        pretrained_full_path=pretrained_slug_full_path if args.pretrained is not None else '',
         task=task, 
         dataset=dataset_slug,
         language=args.language
@@ -249,15 +256,18 @@ def run(args):
     if args.skip_load:
         model, transform, collate_fn, dataloader = None, None, None, None
     else:
-        model, transform, tokenizer = load_clip(
-            model_type=args.model_type,
-            model_name=args.model,
-            pretrained=args.pretrained,
-            cache_dir=args.model_cache_dir,
-            device=args.device
-        )
+        if args.pretrained is None:
+            model, transform, tokenizer = args.model, args.transform, args.tokenizer
+        else:
+            model, transform, tokenizer = load_clip(
+                model_type=args.model_type,
+                model_name=args.model,
+                pretrained=args.pretrained,
+                cache_dir=args.model_cache_dir,
+                device=args.device
+            )
         model.eval()
-        if args.model.count("nllb-clip") > 0:
+        if args.pretrained is not None and args.model.count("nllb-clip") > 0:
             # for NLLB-CLIP models, we need to set the language prior to running the tests
             from clip_benchmark.models.nllb_clip import set_language
 
@@ -404,8 +414,8 @@ def run(args):
         raise ValueError("Unsupported task: {}. task should be `zeroshot_classification`, `zeroshot_retrieval`, `linear_probe`, or `captioning`".format(task))
     dump = {
         "dataset": args.dataset,
-        "model": args.model,
-        "pretrained": args.pretrained,
+        # "model": args.model,
+        # "pretrained": args.pretrained,
         "task": task,
         "metrics": metrics,
         "language": args.language,
