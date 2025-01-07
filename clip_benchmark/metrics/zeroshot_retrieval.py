@@ -50,8 +50,16 @@ def evaluate(model, dataloader, tokenizer,  device, amp=True, recall_k_list=[5])
 
         # compute the embedding of images and texts
         with torch.no_grad(), autocast():
-            batch_images_emb = F.normalize(model.encode_image(batch_images), dim=-1)
-            batch_texts_emb = F.normalize(model.encode_text(batch_texts_tok), dim=-1)
+            image_embeddings = model.encode_image(batch_images)
+            if isinstance(image_embeddings, dict):
+                image_embeddings = image_embeddings['images_embeddings']
+
+            text_embeddings = model.encode_text(batch_texts_tok)
+            if isinstance(text_embeddings, dict):
+                text_embeddings = text_embeddings['text_embeddings']
+                
+            batch_images_emb = F.normalize(image_embeddings, dim=-1)
+            batch_texts_emb = F.normalize(text_embeddings, dim=-1)
 
         batch_images_emb_list.append(batch_images_emb.cpu())
         batch_texts_emb_list.append(batch_texts_emb.cpu())

@@ -50,6 +50,8 @@ def zero_shot_classifier(model, tokenizer, classnames, templates, device, amp=Tr
                 raise ValueError("templates must be a list or a dict")
             texts = tokenizer(texts).to(device)  # tokenize
             class_embeddings = model.encode_text(texts)
+            if isinstance(class_embeddings, dict):
+                class_embeddings = class_embeddings['text_embeddings']
             class_embedding = F.normalize(class_embeddings, dim=-1).mean(dim=0)
             class_embedding /= class_embedding.norm()
             zeroshot_weights.append(class_embedding)
@@ -112,6 +114,8 @@ def run_classification(model, classifier, dataloader, device, amp=True):
             with autocast():
                 # predict
                 image_features = model.encode_image(images)
+                if isinstance(image_features, dict):
+                    image_features = image_features['images_embeddings']
                 image_features = F.normalize(image_features, dim=-1)
                 logits = 100. * image_features @ classifier
             

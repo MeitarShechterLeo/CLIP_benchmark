@@ -40,6 +40,9 @@ class Featurizer(torch.nn.Module):
 
     def forward(self, input):
         image_features = self.model.encode_image(input)
+        if isinstance(image_features, dict):
+            image_features = image_features['images_embeddings']
+
         if self.normalize:
             image_features = F.normalize(image_features, dim=-1)
         return image_features

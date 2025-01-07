@@ -53,8 +53,15 @@ def evaluate(model, dataloader, tokenizer,  device, amp=True):
         batch_texts_tok_ = tokenizer([text for i, texts in enumerate(batch_texts) for text in texts]).to(device)
         # compute the embedding of images and texts
         with torch.no_grad(), autocast():
-            batch_images_emb = F.normalize(model.encode_image(batch_images_), dim=-1).view(B, nim, -1)
-            batch_texts_emb = F.normalize(model.encode_text(batch_texts_tok_), dim=-1).view(B, nt, -1)
+            image_features = model.encode_image(batch_images_)
+            if isinstance(image_features) == dict:
+                image_features = image_features['images_embeddings']
+            batch_images_emb = F.normalize(image_features, dim=-1).view(B, nim, -1)
+            
+            text_features = model.encode_text(batch_texts_tok_)
+            if isinstance(text_features) == dict:
+                text_features = text_features['text_embeddings']
+            batch_texts_emb = F.normalize(text_features, dim=-1).view(B, nt, -1)
         gt = torch.arange(min(nim, nt)).to(device)
         for i in range(B):
             # iteratve over instances
